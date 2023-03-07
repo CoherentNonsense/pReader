@@ -14,14 +14,17 @@ void preader_set_pd_ptr(PlaydateAPI* pd) {
 
 void preader_start() {
   // playdate->file->mkdir(".cache");
+  textscroll_set_pd_ptr(playdate);
   text = textscroll_new("test.txt", "fonts/Georgia-14");
 
   textscroll_draw(text, 0);
 }
 
 void preader_update() {
-  offset += (int)playdate->system->getCrankChange();
-  if (offset != 0) {  
+  int change = (int)playdate->system->getCrankChange();
+  if (change != 0) {
+    // textscroll_changeFont(text, "fonts/Georgia-12");
+    offset += change;
     offset = textscroll_draw(text, offset);
   }
 }
