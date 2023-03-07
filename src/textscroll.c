@@ -30,6 +30,7 @@ typedef struct TextScroll {
   LCDFont* font;
   int margin_x;
   int margin_y;
+  float progress;
   
   int total_chunks;
   TextChunk* chunks;
@@ -43,49 +44,16 @@ void textscroll_set_pd_ptr(PlaydateAPI* pd) {
   playdate = pd;
 }
 
-TextScroll* textscroll_new(const char* file_path, const char* font_path) {
-  FileStat stat;
-  int stat_result = playdate->file->stat(file_path, &stat);
-
-  // If file doesn't exist  
-  if (stat_result == -1) {
-    return NULL;
-  }
-  
+TextScroll* textscroll_new() {
   TextScroll* text = (TextScroll*)playdate->system->realloc(NULL, sizeof(TextScroll));
-  
-  // Copy font path
-  for (int i = 0; i < 100; i++) {
-    text->font_path[i] = font_path[i];
-    if (font_path[i] == 0) {
-      break;
-    }
-  }
-  // Copy file path
-  for (int i = 0; i < 100; i++) {
-    text->file_path[i] = file_path[i];
-    if (font_path[i] == 0) {
-      break;
-    }
-  }
-  const char* err;
-  text->file_stat = stat;  
-  text->file = playdate->file->open(file_path, kFileReadData);
-  text->font = playdate->graphics->loadFont(font_path, &err);
-  
+
+  text->file = NULL;
+  text->font = NULL;
+  text->file_path[0] = 0;
+  text->font_path[0] = 0;  
   text->margin_x = 5;
   text->margin_y = 5;
-  
-  // Chunks
-  // HACK: Add 5 extra since total_chunks is a little less than actual
-  text->total_chunks = (text->file_stat.size / BUFFER_SIZE) + 5;
-  text->chunks = (TextChunk*)playdate->system->realloc(NULL, sizeof(TextChunk) * text->total_chunks);  
-  
-  for (int i = 0; i < text->total_chunks; i++) {
-    text->chunks[i].start_index = -1;
-    text->chunks[i].start_height = -1;
-  }
-  
+    
   // Text buffers
   text->buffers_index = 0;
   text->buffers_length = 0;
@@ -102,7 +70,9 @@ void textscroll_free(TextScroll* text) {
   playdate->file->close(text->file);
   
   playdate->system->realloc(text->buffers, 0);
-  playdate->system->realloc(text->chunks, 0);
+  if (text->chunks != NULL) {
+    playdate->system->realloc(text->chunks, 0);
+  }
   playdate->system->realloc(text, 0);
 }
 
@@ -220,12 +190,16 @@ static int textscroll_getBuffer(TextScroll* text, int height) {
 }
 
 int textscroll_draw(TextScroll* text, int scroll) {
+  if (text->file_path[0] == 0 && text->font_path[0] == 0) {
+    return 0;
+  }
+  
   if (scroll < 0) {
     scroll = 0;
   }
   
   frame += 1;
-  int buffer_id = textscroll_getBuffer(text, scroll);
+  int buffer_id = textscroll_getBuffer(text, scroll - text->margin_y);
   
   TextBuffer* buffer= &text->buffers[buffer_id];
   TextChunk* chunk = &text->chunks[buffer->owner_index];
@@ -239,11 +213,13 @@ int textscroll_draw(TextScroll* text, int scroll) {
   playdate->graphics->fillRect(0, 0, 400, 240, kColorWhite);
   playdate->graphics->drawText(buffer->text, chunk->length, kUTF8Encoding, text->margin_x, -scroll + chunk->start_height + text->margin_y);
   playdate->graphics->drawText(next_buffer->text, next_chunk->length, kUTF8Encoding, text->margin_x, -scroll + next_chunk->start_height + text->margin_y);
-  
+
+  text->progress = (float)chunk->start_index / (float)text->file_stat.size;
+
   return scroll;
 }
 
-void textscroll_changeFile(TextScroll* text, const char* path) {
+void textscroll_setFile(TextScroll* text, const char* path) {
   // Compare paths
   for (int i = 0; i < 100; i++) {    
     if (text->file_path[i] != path[i]) {
@@ -254,7 +230,7 @@ void textscroll_changeFile(TextScroll* text, const char* path) {
       return;
     }
   }
-  
+
   SDFile* file = playdate->file->open(path, kFileReadData);
   if (file == NULL) {
     return;
@@ -266,8 +242,26 @@ void textscroll_changeFile(TextScroll* text, const char* path) {
       break;
     }
   }
-  playdate->file->close(text->file);
+  FileStat stat;
+  playdate->file->stat(path, &stat);
+  text->file_stat = stat;
+
+  // Close old file
+  if (text->file != NULL) {
+    playdate->file->close(text->file);
+    playdate->system->realloc(text->chunks, 0);
+  }
   text->file= file;
+
+  // Chunks
+  // HACK: Add 5 extra since total_chunks is a little less than actual
+  text->total_chunks = (text->file_stat.size / BUFFER_SIZE) + 5;
+  text->chunks = (TextChunk*)playdate->system->realloc(NULL, sizeof(TextChunk) * text->total_chunks);  
+  
+  for (int i = 0; i < text->total_chunks; i++) {
+    text->chunks[i].start_index = -1;
+    text->chunks[i].start_height = -1;
+  }
   
   for (int i = 0; i < text->total_chunks; i++) {
     TextChunk* chunk = &text->chunks[i];
@@ -281,7 +275,7 @@ void textscroll_changeFile(TextScroll* text, const char* path) {
   text->buffers_index = 0;  
 }
 
-void textscroll_changeFont(TextScroll* text, const char* path) {
+void textscroll_setFont(TextScroll* text, const char* path) {
   // Compare paths
   for (int i = 0; i < 100; i++) {    
     if (text->font_path[i] != path[i]) {
@@ -319,7 +313,7 @@ void textscroll_changeFont(TextScroll* text, const char* path) {
   text->buffers_index = 0;  
 }
 
-void textscroll_changeMargin(TextScroll* text, const unsigned int horizontal, const unsigned int vertical) {
+void textscroll_setMargin(TextScroll* text, const unsigned int horizontal, const unsigned int vertical) {
   if (horizontal == text->margin_x && vertical == text->margin_y) {
     return;
   }
@@ -337,4 +331,8 @@ void textscroll_changeMargin(TextScroll* text, const unsigned int horizontal, co
   
   text->buffers_length = 0;
   text->buffers_index = 0;
+}
+
+float textscroll_getProgress(TextScroll* text) {
+  return text->progress;  
 }

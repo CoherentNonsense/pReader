@@ -14,6 +14,8 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     preader_set_pd_ptr(playdate);
     preader_start();
     playdate->system->setUpdateCallback(update, playdate);
+  } else if (event == kEventTerminate) {
+    preader_end();
   }
   
   return 0;

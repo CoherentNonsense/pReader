@@ -17,25 +17,27 @@ typedef struct TextScroll TextScroll;
 void textscroll_set_pd_ptr(PlaydateAPI* playdate);
 
 // Creates a new TextScroll. You are responsible for freeing it with 'textscroll_free'.
-// You must include a file_path to a .txt and a font_path to a font.
-TextScroll* textscroll_new(const char* file_path, const char* font_path);
+TextScroll* textscroll_new(void);
 
 // Frees a TextScroll.
 void textscroll_free(TextScroll* text);
 
 // Changes the file to be read from.
-void textscroll_changeFile(TextScroll* text, const char* path);
+void textscroll_setFile(TextScroll* text, const char* path);
 
 // Changes the font for a TextScroll.
-void textscroll_changeFont(TextScroll* text, const char* path);
+void textscroll_setFont(TextScroll* text, const char* path);
 
 // Changes the left and right margins of a TextScroll.
-void textscroll_changeMargin(TextScroll* text, const unsigned int horizontal, const unsigned int vertical);
+void textscroll_setMargin(TextScroll* text, const unsigned int horizontal, const unsigned int vertical);
 
 // Draws a TextScroll with a specific scroll in pixels.
 // 0 is the top of the document and the bottom of the document is unknown,
-// however, the TextScroll will clamp between 0 and the bottom and return the
-// clamped scroll.
+// You must have a font and file set before drawing.
 int textscroll_draw(TextScroll* text, int scroll);
+
+// Gets the progress of the last draw call in the range [0, 1]
+// where 0 is the top of the document, and 1 is the bottom.
+float textscroll_getProgress(TextScroll* text);
 
 #endif

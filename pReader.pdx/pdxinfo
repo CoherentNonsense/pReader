@@ -1,0 +1,7 @@
+name=pReader
+author=Coherent Nonsense
+description=An eReader for your playdate.
+bundleID=com.cohnon.pReader
+version=0.0.1
+pdxversion=11300
+buildtime=731534978
