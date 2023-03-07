@@ -4,7 +4,7 @@
 #define BUFFER_SIZE (1000)
 #define BUFFERS_LENGTH (10)
 
-PlaydateAPI* playdate;
+static PlaydateAPI* playdate;
 
 typedef struct TextChunk {
   int start_height; // Offset from the start of the document in pixels.
@@ -115,6 +115,11 @@ static int textscroll_fillBuffer(TextScroll* text, int chunk_id) {
       continue;
     }
     
+    if (buffer->text[i] == '\r') {
+      buffer->text[i] = ' ';
+      continue;
+    }
+    
     width += playdate->graphics->getTextWidth(text->font, buffer->text + i, 1, kUTF8Encoding, 0);
     if (width > max_width) {
       // Go back to the last space
@@ -125,7 +130,7 @@ static int textscroll_fillBuffer(TextScroll* text, int chunk_id) {
       last_newline = i;
       chunk->height += font_height;
       buffer->text[i] = '\n';
-    }
+    }    
   }
   
   if (last_newline == 0) {
@@ -204,17 +209,23 @@ int textscroll_draw(TextScroll* text, int scroll) {
   TextBuffer* buffer= &text->buffers[buffer_id];
   TextChunk* chunk = &text->chunks[buffer->owner_index];
   
-  int next_buffer_id = textscroll_getBuffer(text, chunk->start_height + chunk->height);
-      
-  TextBuffer* next_buffer = &text->buffers[next_buffer_id];
-  TextChunk* next_chunk = &text->chunks[next_buffer->owner_index];
-    
-  playdate->graphics->setFont(text->font);
-  playdate->graphics->fillRect(0, 0, 400, 240, kColorWhite);
-  playdate->graphics->drawText(buffer->text, chunk->length, kUTF8Encoding, text->margin_x, -scroll + chunk->start_height + text->margin_y);
-  playdate->graphics->drawText(next_buffer->text, next_chunk->length, kUTF8Encoding, text->margin_x, -scroll + next_chunk->start_height + text->margin_y);
-
   text->progress = (float)chunk->start_index / (float)text->file_stat.size;
+  playdate->graphics->fillRect(0, 0, 400, 240, kColorWhite);
+  playdate->graphics->setFont(text->font);
+  
+  if (scroll - text->margin_y > chunk->start_height + chunk->height) {
+    scroll = chunk->start_height + chunk->height + text->margin_y;
+    text->progress = 1.0f;
+  } else {
+    int next_buffer_id = textscroll_getBuffer(text, chunk->start_height + chunk->height);
+    
+    TextBuffer* next_buffer = &text->buffers[next_buffer_id];
+    TextChunk* next_chunk = &text->chunks[next_buffer->owner_index];
+    
+    playdate->graphics->drawText(next_buffer->text, next_chunk->length, kUTF8Encoding, text->margin_x, -scroll + next_chunk->start_height + text->margin_y);
+  }
+  
+  playdate->graphics->drawText(buffer->text, chunk->length, kUTF8Encoding, text->margin_x, -scroll + chunk->start_height + text->margin_y);
 
   return scroll;
 }

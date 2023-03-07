@@ -4,8 +4,7 @@
 #include <string.h>
 
 
-PlaydateAPI* playdate;
-
+static PlaydateAPI* playdate;
 
 // TODO: Cleanup everything
 static int menu = 1;
@@ -27,7 +26,7 @@ static void on_listfiles(const char* filename, void* userdata) {
   // d e m o . t x t \0
   // 0 1 2 3 4 5 6 7 8
   // WHAT: ?Why is this the opposite?
-  if (files_length < 30 && !strcmp(filename + filename_length - 4, ".txt")) {
+  if (files_length < 30 && strcmp(filename, "InstructionsTemplate.txt") && !strcmp(filename + filename_length - 4, ".txt")) {
     int file_index = files_length++;
     strcpy(files[file_index], filename);
     files[file_index][filename_length - 4] = 0;
@@ -86,13 +85,26 @@ void preader_set_pd_ptr(PlaydateAPI* pd) {
 
 void preader_start(void) {
   playdate->file->mkdir(".cache");
-    
+      
   const char* err;
   bitmap_grey = playdate->graphics->loadBitmap("images/grey", &err);
   bitmap_clear = playdate->graphics->newBitmap(32, 32, kColorWhite);
   font = playdate->graphics->loadFont("fonts/Georgia-14", &err);
   playdate->graphics->setFont(font);
   playdate->file->listfiles(".", on_listfiles, NULL, 0);
+  
+  
+  // Copy Instructions.txt if Data is empty
+  if (files_length == 0) {
+    char copy_buffer[500];
+    SDFile* copy_file = playdate->file->open("InstructionsTemplate.txt", kFileRead);
+    SDFile* paste_file = playdate->file->open("Instructions.txt", kFileWrite);
+    int read = playdate->file->read(copy_file, copy_buffer, 500);
+    playdate->file->write(paste_file, copy_buffer, read);
+    playdate->file->close(copy_file);
+    playdate->file->close(paste_file);
+    playdate->file->listfiles(".", on_listfiles, NULL, 0);
+  }
   
   textscroll_set_pd_ptr(playdate);
   text = textscroll_new();

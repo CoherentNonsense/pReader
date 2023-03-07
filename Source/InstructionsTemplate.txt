@@ -1,0 +1,5 @@
+Welcome to pReader!
+
+** Add Books **
+Connect your Playdate to your computer and hold d-pad left + Lock button + Menu button to open your Playdate's Disk.
+You can read any .txt file inside of Data/net.cohnon.preader/.
