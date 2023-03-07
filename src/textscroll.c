@@ -1,4 +1,4 @@
-#include "text.h"
+#include "textscroll.h"
 #include <pd_api.h>
 
 #define BUFFER_SIZE (1000)
@@ -23,11 +23,13 @@ typedef struct TextBuffer {
 } TextBuffer;
 
 typedef struct TextScroll {
-  SDFile* file; // File to read from.
-  FileStat file_stat; // File stats.
+  SDFile* file;
+  FileStat file_stat;
+  char file_path[100]; // File path (to compare with updated file).
   char font_path[100]; // Font path (to compare with updated font).
-  LCDFont* font; // Current font.
-  int margin;
+  LCDFont* font;
+  int margin_x;
+  int margin_y;
   
   int total_chunks;
   TextChunk* chunks;
@@ -58,13 +60,21 @@ TextScroll* textscroll_new(const char* file_path, const char* font_path) {
     if (font_path[i] == 0) {
       break;
     }
-  }    
+  }
+  // Copy file path
+  for (int i = 0; i < 100; i++) {
+    text->file_path[i] = file_path[i];
+    if (font_path[i] == 0) {
+      break;
+    }
+  }
   const char* err;
   text->file_stat = stat;  
   text->file = playdate->file->open(file_path, kFileReadData);
   text->font = playdate->graphics->loadFont(font_path, &err);
   
-  text->margin = 5;
+  text->margin_x = 5;
+  text->margin_y = 5;
   
   // Chunks
   // HACK: Add 5 extra since total_chunks is a little less than actual
@@ -104,7 +114,6 @@ static void textscroll_createChunk(TextScroll* text, int chunk_id, int index, in
 static int frame = 0;
 // Only use with valid indices (Start of newline) and height.
 static int textscroll_fillBuffer(TextScroll* text, int chunk_id) {
-  playdate->system->logToConsole("FILLING %d", frame);  
   // Push to circular array
   int buffer_id = text->buffers_index;
   TextBuffer* buffer = &text->buffers[buffer_id];
@@ -124,7 +133,7 @@ static int textscroll_fillBuffer(TextScroll* text, int chunk_id) {
   
   // Process text
   int width = 0;
-  int max_width = 400 - (text->margin * 2);
+  int max_width = 400 - (text->margin_x * 2);
   int last_newline = 0;
   int font_height = playdate->graphics->getFontHeight(text->font);
   chunk->height = 0;
@@ -227,11 +236,49 @@ int textscroll_draw(TextScroll* text, int scroll) {
   TextChunk* next_chunk = &text->chunks[next_buffer->owner_index];
     
   playdate->graphics->setFont(text->font);
-  playdate->graphics->fillRect(text->margin, 0, 400 - (text->margin * 2) + 1, 240, kColorWhite);
-  playdate->graphics->drawText(buffer->text, chunk->length, kUTF8Encoding, text->margin, -scroll + chunk->start_height);
-  playdate->graphics->drawText(next_buffer->text, next_chunk->length, kUTF8Encoding, text->margin, -scroll + next_chunk->start_height);
+  playdate->graphics->fillRect(0, 0, 400, 240, kColorWhite);
+  playdate->graphics->drawText(buffer->text, chunk->length, kUTF8Encoding, text->margin_x, -scroll + chunk->start_height + text->margin_y);
+  playdate->graphics->drawText(next_buffer->text, next_chunk->length, kUTF8Encoding, text->margin_x, -scroll + next_chunk->start_height + text->margin_y);
   
   return scroll;
+}
+
+void textscroll_changeFile(TextScroll* text, const char* path) {
+  // Compare paths
+  for (int i = 0; i < 100; i++) {    
+    if (text->file_path[i] != path[i]) {
+      break;
+    }
+        
+    if (text->file_path[i] == 0 && path[i] == 0) {
+      return;
+    }
+  }
+  
+  SDFile* file = playdate->file->open(path, kFileReadData);
+  if (file == NULL) {
+    return;
+  }  
+  // Copy path
+  for (int i = 0; i < 100; i++) {
+    text->file_path[i] = path[i];
+    if (path[i] == 0) {
+      break;
+    }
+  }
+  playdate->file->close(text->file);
+  text->file= file;
+  
+  for (int i = 0; i < text->total_chunks; i++) {
+    TextChunk* chunk = &text->chunks[i];
+    if (chunk->start_index == -1) {
+      break;
+    }
+    chunk->start_index = -1;
+  }
+  
+  text->buffers_length = 0;
+  text->buffers_index = 0;  
 }
 
 void textscroll_changeFont(TextScroll* text, const char* path) {
@@ -245,6 +292,12 @@ void textscroll_changeFont(TextScroll* text, const char* path) {
       return;
     }
   }
+    
+  const char* err;
+  LCDFont* font = playdate->graphics->loadFont(path, &err);
+  if (!font) {
+    return;
+  }
   // Copy path
   for (int i = 0; i < 100; i++) {
     text->font_path[i] = path[i];
@@ -252,12 +305,7 @@ void textscroll_changeFont(TextScroll* text, const char* path) {
       break;
     }
   }    
-    
-  const char* err;
-  LCDFont* font = playdate->graphics->loadFont(path, &err);
-  if (!font) {
-    return;
-  }
+  text->font = font;
   
   for (int i = 0; i < text->total_chunks; i++) {
     TextChunk* chunk = &text->chunks[i];
@@ -268,18 +316,16 @@ void textscroll_changeFont(TextScroll* text, const char* path) {
   }
   
   text->buffers_length = 0;
-  text->buffers_index = 0;
-  
-  text->font = font;
+  text->buffers_index = 0;  
 }
 
-void textscroll_changeMargin(TextScroll* text, const unsigned int margin) {
-  if (margin == text->margin) {
+void textscroll_changeMargin(TextScroll* text, const unsigned int horizontal, const unsigned int vertical) {
+  if (horizontal == text->margin_x && vertical == text->margin_y) {
     return;
   }
   
-  playdate->graphics->fillRect(text->margin, 0, 400 - (text->margin * 2), 240, kColorWhite);
-  text->margin = margin;
+  text->margin_x = horizontal;
+  text->margin_y = vertical;
   
   for (int i = 0; i < text->total_chunks; i++) {
     TextChunk* chunk = &text->chunks[i];

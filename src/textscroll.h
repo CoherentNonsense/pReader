@@ -23,11 +23,14 @@ TextScroll* textscroll_new(const char* file_path, const char* font_path);
 // Frees a TextScroll.
 void textscroll_free(TextScroll* text);
 
+// Changes the file to be read from.
+void textscroll_changeFile(TextScroll* text, const char* path);
+
 // Changes the font for a TextScroll.
 void textscroll_changeFont(TextScroll* text, const char* path);
 
 // Changes the left and right margins of a TextScroll.
-void textscroll_changeMargin(TextScroll* text, const unsigned int margin);
+void textscroll_changeMargin(TextScroll* text, const unsigned int horizontal, const unsigned int vertical);
 
 // Draws a TextScroll with a specific scroll in pixels.
 // 0 is the top of the document and the bottom of the document is unknown,
